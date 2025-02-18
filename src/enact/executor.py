@@ -28,19 +28,12 @@ inputs = {json.dumps(inputs, indent=2)}
     def execute_locally(self, task: EnactTask, script: str) -> Dict[str, Any]:
         """Execute a task with its dependencies"""
         try:
-            print(f"Task dependencies: {task.dependencies}")  # Debug print
-
-            # Install dependencies if specified
-            if task.dependencies:
-                print("Installing dependencies...")  # Debug print
-                self.dependency_manager.install_dependencies(
-                    task.dependencies.model_dump())
-            else:
-                print("No dependencies found in task")  # Debug print
+            # Get dependencies
+            dependencies = task.dependencies.model_dump() if task.dependencies else {}
 
             # Execute in managed environment
-            print("Executing script in virtual environment...")  # Debug print
-            output = self.dependency_manager.execute_in_venv(script)
+            output = self.dependency_manager.execute_in_venv(
+                script, dependencies)
 
             try:
                 return json.loads(output.strip())
@@ -48,5 +41,4 @@ inputs = {json.dumps(inputs, indent=2)}
                 raise ValueError(f"Failed to parse output as JSON: {output}")
 
         except Exception as e:
-            print(f"Error in execute_locally: {str(e)}")  # Debug print
             raise RuntimeError(f"Task execution failed: {str(e)}")

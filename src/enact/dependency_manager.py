@@ -2,67 +2,86 @@ import virtualenv
 import subprocess
 import tempfile
 import os
+import hashlib
+import json
 from pathlib import Path
 from typing import Dict, List, Optional
-import pkg_resources
 
 
 class DependencyManager:
-    def __init__(self, venv_path: Optional[Path] = None):
-        """Initialize dependency manager with optional custom venv path"""
-        self.venv_path = venv_path or Path(tempfile.mkdtemp()) / '.venv'
-        # Added debug print
-        print(f"Creating virtual environment at: {self.venv_path}")
-        self._ensure_venv()
+    def __init__(self, cache_dir: Optional[Path] = None):
+        """Initialize dependency manager with optional cache directory"""
+        self.cache_dir = cache_dir or Path.home() / '.enact' / 'venvs'
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Using cache directory: {self.cache_dir}")
 
-    def _ensure_venv(self):
-        """Create virtual environment if it doesn't exist"""
-        if not self.venv_path.exists():
-            print(f"Creating new virtual environment...")  # Added debug print
-            virtualenv.cli_run([str(self.venv_path)])
-            # Added debug print
-            print("Virtual environment created successfully")
+    def _get_env_hash(self, dependencies: Dict) -> str:
+        """Create a unique hash for the dependencies configuration"""
+        # Sort dependencies to ensure consistent hashing
+        dep_str = json.dumps(dependencies, sort_keys=True)
+        return hashlib.sha256(dep_str.encode()).hexdigest()[:12]
 
-    def _get_pip_path(self) -> Path:
+    def _get_cached_venv(self, dependencies: Dict) -> Path:
+        """Get or create a cached virtual environment for given dependencies"""
+        env_hash = self._get_env_hash(dependencies)
+        venv_path = self.cache_dir / env_hash
+
+        if not venv_path.exists():
+            print(f"Creating new virtual environment for hash {env_hash}")
+            virtualenv.cli_run([str(venv_path)])
+
+            # Install dependencies in the new environment
+            if dependencies.get('python'):
+                python_deps = dependencies['python']
+
+                # Check Python version compatibility
+                if python_deps.get('version'):
+                    self._check_python_version(python_deps['version'])
+
+                # Install required packages
+                if python_deps.get('packages'):
+                    requirements = [
+                        f"{pkg['name']}{pkg['version']}"
+                        for pkg in python_deps['packages']
+                    ]
+                    self._install_packages(venv_path, requirements)
+
+            # Create a marker file with dependency info
+            with open(venv_path / 'dependencies.json', 'w') as f:
+                json.dump(dependencies, f)
+        else:
+            print(f"Using cached virtual environment: {env_hash}")
+
+        return venv_path
+
+    def _install_packages(self, venv_path: Path, requirements: List[str]) -> None:
+        """Install Python packages in the specified virtual environment"""
+        pip_path = self._get_pip_path(venv_path)
+        print(f"Installing packages: {requirements}")
+
+        try:
+            process = subprocess.run(
+                [str(pip_path), 'install'] + requirements,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print("Package installation successful")
+        except subprocess.CalledProcessError as e:
+            print(f"Package installation failed: {e.stderr}")
+            raise RuntimeError(f"Failed to install dependencies: {e.stderr}")
+
+    def _get_pip_path(self, venv_path: Path) -> Path:
         """Get path to pip executable in venv"""
         if os.name == 'nt':  # Windows
-            return self.venv_path / 'Scripts' / 'pip.exe'
-        return self.venv_path / 'bin' / 'pip'
+            return venv_path / 'Scripts' / 'pip.exe'
+        return venv_path / 'bin' / 'pip'
 
-    def _get_python_path(self) -> Path:
+    def _get_python_path(self, venv_path: Path) -> Path:
         """Get path to Python executable in venv"""
         if os.name == 'nt':  # Windows
-            return self.venv_path / 'Scripts' / 'python.exe'
-        return self.venv_path / 'bin' / 'python'
-
-    def install_dependencies(self, dependencies: Optional[Dict]) -> None:
-        """Install dependencies from Enact task definition"""
-        print(f"Installing dependencies: {dependencies}")  # Added debug print
-
-        if not dependencies or 'python' not in dependencies:
-            print("No Python dependencies found")  # Added debug print
-            return
-
-        python_deps = dependencies.get('python')
-        if not python_deps:
-            print("Python dependencies section is empty")  # Added debug print
-            return
-
-        # Check Python version compatibility
-        if python_deps.get('version'):
-            # Added debug print
-            print(
-                f"Checking Python version compatibility: {python_deps['version']}")
-            self._check_python_version(python_deps['version'])
-
-        # Install required packages
-        if python_deps.get('packages'):
-            requirements = [
-                f"{pkg['name']}{pkg['version']}"
-                for pkg in python_deps['packages']
-            ]
-            print(f"Installing packages: {requirements}")  # Added debug print
-            self._install_packages(requirements)
+            return venv_path / 'Scripts' / 'python.exe'
+        return venv_path / 'bin' / 'python'
 
     def _check_python_version(self, version_spec: str) -> None:
         """Check if current Python version meets requirements"""
@@ -73,42 +92,26 @@ class DependencyManager:
         current_version = version.parse(sys.version.split()[0])
         spec = SpecifierSet(version_spec)
 
-        print(f"Current Python version: {current_version}")  # Debug print
-        print(f"Required version spec: {version_spec}")  # Debug print
+        print(
+            f"Checking Python version: {current_version} against {version_spec}")
 
         if current_version not in spec:
             raise RuntimeError(
                 f"Python version {current_version} does not meet requirement: {version_spec}")
 
-    print("Python version check passed")  # Debug print
+        print("Python version check passed")
 
-    def _install_packages(self, requirements: List[str]) -> None:
-        """Install Python packages in the virtual environment"""
-        pip_path = self._get_pip_path()
-        print(f"Using pip at: {pip_path}")  # Added debug print
-        print(f"Installing requirements: {requirements}")  # Added debug print
+    def execute_in_venv(self, script: str, dependencies: Dict) -> str:
+        """Execute a script in a cached virtual environment"""
+        venv_path = self._get_cached_venv(dependencies)
+        python_path = self._get_python_path(venv_path)
 
-        process = subprocess.run(
-            [str(pip_path), 'install'] + requirements,
-            capture_output=True,
-            text=True
-        )
-        if process.returncode != 0:
-            # Added debug print
-            print(f"Package installation failed: {process.stderr}")
-            raise RuntimeError(
-                f"Failed to install dependencies: {process.stderr}")
-        print("Package installation successful")  # Added debug print
-
-    def execute_in_venv(self, script: str) -> str:
-        """Execute a script in the virtual environment"""
-        python_path = self._get_python_path()
-        # Added debug print
         print(f"Executing script with Python at: {python_path}")
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as tmp:
             tmp.write(script)
             tmp.flush()
+
             try:
                 process = subprocess.run(
                     [str(python_path), tmp.name],
@@ -116,8 +119,6 @@ class DependencyManager:
                     text=True
                 )
                 if process.returncode != 0:
-                    # Added debug print
-                    print(f"Script execution failed: {process.stderr}")
                     raise RuntimeError(
                         f"Script execution failed: {process.stderr}")
                 return process.stdout
