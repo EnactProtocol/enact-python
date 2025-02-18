@@ -8,6 +8,7 @@ import json
 HELLO_TASK = {
     "enact": "1.0.0",
     "id": "HelloWorld",
+    "name": "Hello World",
     "description": "A simple hello world task",
     "version": "1.0.0",
     "type": "atomic",
