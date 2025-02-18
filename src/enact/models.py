@@ -1,6 +1,19 @@
 # src/enact/models.py
 from typing import List, Dict, Any, Literal, Optional
 from pydantic import BaseModel, Field
+from typing import Optional, List
+
+
+class SearchResult(BaseModel):
+    id: str
+    description: str
+    version: str
+    type: str = Field(default="atomic")
+    similarity: float = Field(
+        description="Similarity score from vector search")
+    name: Optional[str] = None  # Made optional since it's not in response
+    inputs: Optional[Dict[str, Any]] = None
+    outputs: Optional[Dict[str, Any]] = None
 
 
 class PackageDependency(BaseModel):
