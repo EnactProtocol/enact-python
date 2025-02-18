@@ -10,7 +10,7 @@ async def main():
 
     try:
         print("Attempting to execute task...")
-        result = await client.execute_task("hello world", {
+        result = await client.execute_task("simpletest", {
             "name": "World"
         })
         print("Task output:", result)

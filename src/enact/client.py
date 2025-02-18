@@ -2,7 +2,6 @@
 import httpx
 from typing import Dict, Any
 import json
-
 from .models import EnactTask
 from .executor import TaskExecutor
 
@@ -16,18 +15,31 @@ class EnactClient:
         """Fetch task definition from registry"""
         try:
             async with httpx.AsyncClient() as client:
-                # Updated endpoint path
                 url = f"{self.api_base_url}/api/yaml/tasks/{task_id}"
                 print(f"Requesting URL: {url}")
                 response = await client.get(url)
                 response.raise_for_status()
 
-                # Debug: Print response
-                print(f"Server response: {response.text}")
-
                 # Parse response
                 data = response.json()
-                return EnactTask.model_validate(data)
+
+                # Extract protocolDetails
+                if 'protocolDetails' not in data:
+                    raise ValueError(
+                        f"Response missing protocolDetails: {data}")
+
+                protocol_details = data['protocolDetails']
+
+                # Add type if missing (since it's in the parent object)
+                if 'type' not in protocol_details and 'type' in data:
+                    protocol_details['type'] = data['type']
+
+                print("Protocol details to validate:",
+                      json.dumps(protocol_details, indent=2))
+
+                # Validate the protocolDetails part
+                return EnactTask.model_validate(protocol_details)
+
         except httpx.HTTPError as e:
             print(f"HTTP error occurred: {e}")
             raise

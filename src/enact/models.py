@@ -1,5 +1,6 @@
+# src/enact/models.py
 from typing import List, Dict, Any, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Author(BaseModel):
@@ -36,12 +37,16 @@ class Flow(BaseModel):
 class EnactTask(BaseModel):
     enact: str
     id: str
-    name: str  # Added this field
+    name: str
     description: str
     version: str
-    type: Literal["atomic", "composite"]
+    # Make type optional with default value
+    type: str = Field(default="atomic")
     authors: List[Author]
     inputs: Dict[str, TaskInput]
     tasks: List[Task]
     flow: Flow
     outputs: Dict[str, TaskOutput]
+
+    class Config:
+        extra = "allow"  # Allow extra fields in the input data
