@@ -3,6 +3,21 @@ from typing import List, Dict, Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 
+class PackageDependency(BaseModel):
+    name: str
+    version: str
+
+
+class PythonDependencies(BaseModel):
+    packages: List[PackageDependency]
+    version: Optional[str] = None
+
+
+class Dependencies(BaseModel):
+    python: Optional[PythonDependencies] = None
+    # Add other runtime dependencies as needed
+
+
 class Author(BaseModel):
     name: str
 
@@ -40,13 +55,13 @@ class EnactTask(BaseModel):
     name: str
     description: str
     version: str
-    # Make type optional with default value
     type: str = Field(default="atomic")
     authors: List[Author]
     inputs: Dict[str, TaskInput]
     tasks: List[Task]
     flow: Flow
     outputs: Dict[str, TaskOutput]
+    dependencies: Optional[Dependencies] = None  # New field
 
     class Config:
         extra = "allow"  # Allow extra fields in the input data

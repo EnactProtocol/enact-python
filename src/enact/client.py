@@ -61,7 +61,8 @@ class EnactClient:
             script = self.executor.create_script(task, inputs)
 
             print(f"Generated script:\n{script}")
-            return self.executor.execute_locally(script)
+            # Updated to pass both task and script
+            return self.executor.execute_locally(task, script)
         except Exception as e:
             print(f"Error in execute_task: {e}")
             raise

@@ -1,0 +1,75 @@
+enact: 1.0.0
+id: DataAnalyzer
+name: Basic Data Analysis
+description: Performs basic statistical analysis on numerical data
+version: 1.0.0
+type: atomic
+authors:
+    - name: Jane Doe
+dependencies:
+    python:
+        version: ">=3.9,<4.0"
+        packages:
+            - name: pandas
+              version: ">=2.0.0,<3.0.0"
+            - name: numpy
+              version: ">=1.24.0"
+            - name: matplotlib
+              version: ">=3.7.0"
+inputs:
+    data:
+        type: array
+        description: Array of numerical values to analyze
+tasks:
+    -   id: analyze_data
+        type: script
+        language: python
+        code: |
+            import pandas as pd
+            import numpy as np
+            import matplotlib.pyplot as plt
+            import io
+            import base64
+            
+            # Convert input to pandas series
+            data = pd.Series(inputs['data'])
+            
+            # Calculate basic statistics and convert numpy types to Python native types
+            stats = {
+                'mean': float(data.mean()),
+                'median': float(data.median()),
+                'std': float(data.std()),
+                'min': float(data.min()),
+                'max': float(data.max()),
+                'quartiles': {str(k): float(v) for k, v in data.quantile([0.25, 0.5, 0.75]).to_dict().items()}
+            }
+            
+            # Create histogram
+            plt.figure(figsize=(10, 6))
+            plt.hist(data, bins=30, edgecolor='black')
+            plt.title('Data Distribution')
+            plt.xlabel('Value')
+            plt.ylabel('Frequency')
+            
+            # Save plot to base64
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png')
+            buf.seek(0)
+            plot_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+            plt.close()
+            
+            # Return results
+            print(json.dumps({
+                'statistics': stats,
+                'histogram': plot_b64
+            }))
+flow:
+    steps:
+        - task: analyze_data
+outputs:
+    statistics:
+        type: object
+        description: Basic statistical measures of the data
+    histogram:
+        type: string
+        description: Base64 encoded histogram plot
